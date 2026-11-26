@@ -153,6 +153,12 @@ void *nx2_nvn_watch(const char *name) {
         fclose(f);
         nogpu = !strncmp(what, "submit", 6) ? 1 : !strncmp(what, "present", 7) ? 2 : 3;
     }
+    if (nogpu || nx2_nvnlock) return (void *)loader_watched;
+
+    // Keep the SDK's native dispatch by default. The watcher is a separate diagnostic.
+    f = fopen(NX2_F("nvnwatch"), "rb");
+    if (!f) return NULL;
+    fclose(f);
     return (void *)loader_watched;
 }
 #endif

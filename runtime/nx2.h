@@ -105,6 +105,8 @@ void nx2_rom_open(void);
 int nx2_rom_ipc(u8 *message);  // a message to the file system service: 1 if answered here
 int nx2_aoc_ipc(u8 *message);  // a message to the add-on content service: 1 if answered here
 void nx2_save_open(void);      // the game's saved data: a folder of the card (<folder>/save)
+int nx2_has_sd_save_fs(void);
+u32 nx2_create_cache_storage(s32 index, s64 data_size, s64 journal_size);
 int nx2_save_before(u8 *message, char (*paths)[0x301], u32 *handle);
 void nx2_save_after(u8 *message, int how);
 

@@ -821,6 +821,9 @@ void *nx2_override(const char *name) {
         void *watch = nx2_nvn_watch(name);
         if (watch) return watch;
 #ifdef NX2_GAME_MB
+        if (!strcmp(name, "_ZN2nn2fs18CreateCacheStorageEill") && nx2_has_sd_save_fs())
+            return nx2_create_cache_storage;
+
         // A Switch 2 game's AudioOut is its SDK's own, as its audio renderer is: this console's SDK reaches both through aud:u
         // (its ListAudioOuts and its audio renderer manager open the same session of it), which the game the port is started
         // over may open. The silent output of audio2.c is for a Switch game, whose SDK asks for audout:u and is refused; it was

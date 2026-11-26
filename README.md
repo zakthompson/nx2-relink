@@ -221,9 +221,11 @@ A port is two things on the SD card: its program, **`/switch/nx2-relink/<name>.n
 | **`crash.txt`** | **Written when a run ended badly: the file to send with a report** |
 | `log.txt`, `log.prev.txt` | The log of the last run, and of the one before |
 | `debug` | If this file exists (empty will do), the log is the detailed one |
+| `nvnwatch` | If this file exists when the port starts, log selected calls to the game's native NVN driver |
 | **`mods/`** | **Optional: files of yours that the game gets in place of its own (below)** |
 
 **Saved data.** A port keeps its saves in `/nx2-relink/<name>/save/`, as loose files, exactly as the game writes them.
+When the port uses the host's SD file system, each cache storage index gets its own directory under `/nx2-relink/<name>/cache/`.
 They are **apart from the console's own save data**: a port doesn't read or touch the saves of the installed game, and the
 installed game doesn't see the port's. To back a port's saves up, copy that folder; to start over, delete it. Deleting a port's
 folder deletes its saves with it.
