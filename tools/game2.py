@@ -130,12 +130,71 @@ def layers_of(path, as_update=False):
             out.append(folder_layer(os.path.join(updates, n), 'an update', int(n) if n.isdigit() else order + 1))
     for n in os.listdir(folder):
         if n.lower() in ('dlc', 'dlcs', 'aoc', 'addons', 'add-ons') and os.path.isdir(os.path.join(folder, n)):
-            left.append(f'{n}/ (added content): not taken yet')
+            pass  # (added content: taken by aoc_of)
     if not out:
         raise SystemExit(f'{path}: no game found there. A folder dump has exefs/ and romfs/, or base/ and updates/<version>/ with those in them.')
     for layer in out:
         layer.facts.setdefault('title', os.path.basename(os.path.normpath(path)))
     return out, left
+
+
+def aoc_of(path):
+    """The add-on content of a dump: [(index, {path: (size, pieces_fn)})] for each one there. The index is the lower 12 bits of its
+    title's number, as the game asks for it (OpenDataStorageByDataId). From a NUP's kind-2 packages, or from a folder dump's
+    dlc/ (or aoc/, addons/, add-ons/): <title id>/<version>/romfs/, the newest version of each title."""
+    out = []
+    if os.path.isfile(path):
+        box = container.Nup(path)
+        for k, p in enumerate(box.packages):
+            if p['kind'] != 2 or p['romfs'] == 0xFFFFFFFF:
+                continue
+            index = p['title'] & 0xFFF
+            out.append((index, container.package_files(box, k)))
+        return out
+    folder = path
+    for _ in range(3):
+        inside = os.listdir(folder)
+        if any(os.path.isdir(os.path.join(folder, n)) for n in ('exefs', 'romfs', 'base', 'updates')):
+            break
+        if len(inside) == 1 and os.path.isdir(os.path.join(folder, inside[0])):
+            folder = os.path.join(folder, inside[0])
+        else:
+            break
+    for n in os.listdir(folder):
+        if n.lower() not in ('dlc', 'dlcs', 'aoc', 'addons', 'add-ons') or not os.path.isdir(os.path.join(folder, n)):
+            continue
+        dlc_root = os.path.join(folder, n)
+        for title_name in sorted(os.listdir(dlc_root)):
+            title_dir = os.path.join(dlc_root, title_name)
+            if not os.path.isdir(title_dir) or title_name.startswith('.'):
+                continue
+            try:
+                index = int(title_name, 16) & 0xFFF
+            except ValueError:
+                continue
+            # the newest version's romfs (the highest-numbered subfolder that has one, or the title folder itself)
+            versions = sorted([v for v in os.listdir(title_dir) if os.path.isdir(os.path.join(title_dir, v)) and not v.startswith('.')],
+                              key=lambda v: (int(v) if v.isdigit() else 0, v))
+            romfs = None
+            for v in reversed(versions):
+                r = os.path.join(title_dir, v, 'romfs')
+                if os.path.isdir(r):
+                    romfs = r
+                    break
+            if not romfs:
+                r = os.path.join(title_dir, 'romfs')
+                if os.path.isdir(r):
+                    romfs = r
+            if not romfs:
+                continue
+            files = {}
+            for d, _, names in os.walk(romfs):
+                for name in names:
+                    p = os.path.join(d, name)
+                    files[os.path.relpath(p, romfs).replace(os.sep, '/')] = (os.path.getsize(p), from_disk(p))
+            if files:
+                out.append((index, files))
+    return out
 
 
 def program_id(npdm):
@@ -162,6 +221,7 @@ class Dump:
         if not with_code:
             raise SystemExit(f'{path}: no program there (an exefs folder with "main" in it)')
         self.code = with_code[-1]
+        self.aoc = sorted(aoc_of(path), key=lambda a: a[0])
 
     def files(self, say=None):
         merged = {}
@@ -192,6 +252,8 @@ class Dump:
         lines = [layer.said() for layer in self.layers]
         lines.append(f'a port takes: the program of {self.code.what}{f" {version_text(self.code.version)}" if self.code.version else ""}'
                      f' ({", ".join(sorted(self.code.modules))}); the files of all of them, the later over the earlier')
+        for index, files in self.aoc:
+            lines.append(f'added content {index}: {len(files)} files, {sum(s for s, _ in files.values()) >> 10} KB (aoc{index}.romfs)')
         return lines + [f'left: {x}' for x in self.left]
 
 
@@ -362,7 +424,14 @@ def main():
     files = dump.files(print)
     if not files:
         sys.exit('no files there (no romfs folder)')
-    sys.exit(0 if container.send_image(container.RomFS(files), args[2], parts) else 1)
+    ok = container.send_image(container.RomFS(files), args[2], parts)
+    for index, aoc_files in dump.aoc:
+        dest = args[2]
+        # romfs.bin → aoc<n>.romfs (the same folder, whether a path, ftp:// or ttx://)
+        slash = dest.rfind('/')
+        dest = (dest[:slash + 1] if slash >= 0 else '') + f'aoc{index}.romfs'
+        ok = container.send_image(container.RomFS(aoc_files), dest, False) and ok
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == '__main__':
